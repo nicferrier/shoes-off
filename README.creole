@@ -1,0 +1,104 @@
+a simple IRC bouncer written in EmacsLisp.
+
+A bouncer is a program that runs on a remote host and provides a sort
+of proxy irc server.  It connects to the real irc server with your
+nick and authentication details and let's you connect to it (with
+possibly no security, or different security).
+
+This bouncer is written using {{{rcirc}}} to make the upstream
+connection.
+
+
+== Making it work ==
+
+Install this or install from the package on marmalade.
+
+You need to install this in the place you want a bouncer. Not on your
+local machine (you probably don't want a bouncer there).
+
+Then define a config, you can customize the variable :
+
+{{{
+shoes-off-config
+}}}
+
+You can also just setq it with something like:
+
+{{{
+(setq shoes-off-config
+      '((:username "bouncer-username"
+         :password "bouncer-password"
+         :server-alist (("irc.upstream.servername"
+                         :nick "nick-at-the-irc-network"
+                         :port 6667
+                         :user-name "user-to-connect-to-the-irc-network"
+                         :password "password-to-connect-to-the-irc-network"
+                         :full-name "Full Name"
+                         :channels ("#channel" "#otherchannel"))))))
+}}}
+
+//Currently only ONE upstream mayb be specified.//
+
+Once that is done you need to start a {{{shoes-off}}} session. A
+session is the bouncer's upstream connection to the IRC.
+
+{{{
+(shoes-off-start-session "nicferrier")
+}}}
+
+This needs to be done in Elisp right now. There's no user way of doing
+this.
+
+Again on the bouncer, you need to start the bouncer server:
+
+{{{
+M-x shoes-off-start [RET] 6901 [RET]
+}}}
+
+//6901// is a listener TCP port. It could be anything. Choose wisely.
+
+
+== Connecting to a running bouncer ==
+
+To connect to the running bouncer you need to point your irc client at
+the port you selected and use the username and password from the
+{{{shoes-off-config}}}.  Here's an {{{rcirc}}} example:
+
+{{{
+(rcirc-connect 
+    "my-bouncer.example.org"                 ; hostname of bouncer
+    6901                                     ; port you started the bouncer on
+    "nick-at-the-irc-network"                ; the Nick to use (only used locally)
+    "user-to-connect-to-the-irc-network"     ; the username to connect to bouncer
+    "password-to-connect-to-the-irc-network" ; the password to connect to bouncer
+    "Full Name"                              ; full name (not used I think)
+    ("#channel" "#otherchannel"))            ; start channels (not used I think)
+}}}
+
+This will connect to the bouncer and everything //should// work.
+
+== BUGS ==
+
+Please report bugs or feature requests to
+[[https://github.com/nicferrier/shoes-off/issues|GitHub]].
+
+I'm sure there are loads.
+
+== Security ==
+
+**WARNING** this DOES expose your password to the bouncer box.  I have
+made little attempt to secure this right now.  IRC is not very
+secure anyway.
+
+If you want secure IRC for your team consider 
+[[https://github.com/nfisher/SpikyIRC|SpikyIRC]]
+
+
+== Next steps ==
+
+A lot of work needs to go into automating the startup. But alternately
+I may just setup a hosting service for bouncers.
+
+== Why is it called 'Shoes Off'? ==
+
+Because you have to take your shoes off on a bouncey castle.
