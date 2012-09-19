@@ -6,7 +6,8 @@
 ;; Keywords: comm
 ;; Maintainer: Nic Ferrier <nferrier@ferrier.me.uk>
 ;; Created: 19th September 2012
-;; Version: 0.0.1
+;; Version: 0.0.2
+;; Package-Requires: ((kv "0.0.5")(anaphora "0.0.3"))
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
