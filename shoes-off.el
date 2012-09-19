@@ -6,8 +6,8 @@
 ;; Keywords: comm
 ;; Maintainer: Nic Ferrier <nferrier@ferrier.me.uk>
 ;; Created: 19th September 2012
-;; Version: 0.0.2
-;; Package-Requires: ((kv "0.0.5")(anaphora "0.0.3"))
+;; Version: 0.0.6
+;; Package-Requires: ((kv "0.0.5")(anaphora "0.0.2"))
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -33,6 +33,7 @@
 (require 'anaphora) ; packaged
 (require 'cl)
 (require 'kv)
+(require 'rcirc)
 
 (defgroup shoes-off nil
   "An irc bouncer."
@@ -257,15 +258,16 @@ What's cached is the full text response of the command.")
 (defvar rcrirc-bouncer--server-process nil
   "The server socket.")
 
-;; Make a server socket
+;;;###autoload
 (defun shoes-off--make-server (port)
+  "Make the listening server socket."
   (let ((buf (get-buffer-create "*shoes-off*")))
     (make-network-process
      :name "*shoes-off*"
      :buffer buf
      :server t
      :nowait 't
-     :host 'local ; see elnode for interesting rules about this
+     :host nil ; see elnode for interesting rules about this
      :service port
      :coding '(raw-text-unix . raw-text-unix)
      :family 'ipv4
@@ -276,6 +278,7 @@ What's cached is the full text response of the command.")
 
 (defvar shoes-off-start--port-history nil)
 
+;;;###autoload
 (defun shoes-off-start (port)
   "Start the bouncer daemon on PORT."
   (interactive (list
@@ -285,6 +288,7 @@ What's cached is the full text response of the command.")
   (setq rcrirc-bouncer--server-process
         (shoes-off--make-server (string-to-number port))))
 
+;;;###autoload
 (defun shoes-off-stop ()
   "Stop the bouncer daemon."
   (interactive)
@@ -324,6 +328,7 @@ What's cached is the full text response of the command.")
  'rcirc-receive-message-hooks
  'shoes-off--receive-hook)
 
+;;;###autoload
 (defun shoes-off-start-session (username)
   "Start the bouncer for USERNAME.
 
@@ -357,4 +362,6 @@ Initiates the upstream IRC connections for the user."
          connection
          shoes-off--sessions)))))
 
-;; End
+(provide 'shoes-off)
+
+;;; shoes-off.el ends here
