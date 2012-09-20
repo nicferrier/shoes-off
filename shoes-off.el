@@ -6,7 +6,7 @@
 ;; Keywords: comm
 ;; Maintainer: Nic Ferrier <nferrier@ferrier.me.uk>
 ;; Created: 19th September 2012
-;; Version: 0.0.6
+;; Version: 0.0.10
 ;; Package-Requires: ((kv "0.0.5")(anaphora "0.0.2"))
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -42,13 +42,19 @@
   :prefix "shoes-off-"
   :group 'applications)
 
+(defcustom shoes-off-server-port "6901"
+  "The TCP port the bouncer server will run on."
+  :group 'shoes-off
+  :type 'string)
+
 (defcustom shoes-off-config '()
   "The bouncer configuration.
 
 A list of plists describing the configuration of the bouncer.
 
-IMPORTANT: The server-alist is can only be ONE SERVER. The
-bouncer cannot service multiple upstream sessions right now."
+IMPORTANT: The server-alist can be multiple servers. The bouncer
+will start all of them and qualify access to them like
+`username@servername'."
   :group 'shoes-off
   :type
   '(repeat
@@ -121,8 +127,8 @@ config that matches the username.
 
 The regex used to find the username allows @'s in the username.
 
-If successful returns a list where the first element if the full
-bouncer spec of the user if auth passes.
+If successful returns the bouncer spec with the username
+transformed to the server qualified version.
 
 Returns `nil' if auth is not found."
   (destructuring-bind (username service)
@@ -137,13 +143,20 @@ Returns `nil' if auth is not found."
             (plist-get bouncer :password))
            (or (eq service t)
                (assoc service (plist-get bouncer :server-alist))))
-       ;; Return the whole bouncer and JUST the service that matched
-       return (list bouncer
-                    (if (eq service t)
-                        (cdar (plist-get bouncer :server-alist))
-                        (aget
-                         (plist-get bouncer :server-alist)
-                         service))))))
+       ;; Return the bouncer with the username transformed
+       return (let ((username (plist-get bouncer :username))
+                    (server
+                     (if (eq service t)
+                         ;; Pick the first off the server alist
+                         (car (plist-get bouncer :server-alist))
+                         ;; else pick the specified one
+                         (aget
+                          (plist-get bouncer :server-alist)
+                          service))))
+                (plist-put
+                 (copy-list bouncer)
+                 :username
+                 (format "%s@%s" username (car server)))))))
 
 
 (defun shoes-off-auth (bouncer-buffer)
@@ -174,8 +187,8 @@ Unsuccessful auth makes no changes and returns `nil'."
       (when (and (plist-get details :pass)
                  (plist-get details :user)
                  (plist-get details :nick))
-        (goto-char pt))
-        details)))
+        (goto-char pt)
+        details))))
 
 (defconst shoes-off--cmd-numbers
   '(("WELCOME" . 1)
@@ -279,22 +292,23 @@ What's cached is the full text response of the command.")
         (goto-char (point-max))
         (insert data)))
     (let ((authenticated (process-get process :shoes-off-authenticated)))
-      (unless authenticated
-        (awhen (shoes-off-auth (process-buffer process))
-          (destructuring-bind (&key pass user user-info nick) it
-            (awhen (shoes-off--auth-check user pass)
-              (destructuring-bind (bouncer-spec server-config) it
-                ;; Note - what goes on the process is the bouncer-spec
-                (setq authenticated bouncer-spec)
-                (shoes-off--authenticate process authenticated)
-                ;; Send the welcome back to the bouncer user
-                (shoes-off--send-welcome process))))))
-      ;; Done with auth... try and deal with other commands
-      (with-current-buffer procbuf
-        (awhile (re-search-forward "[^\n]+\n" nil t)
-          (goto-char it) ; DO move point
-          (shoes-off--handle-request
-           process authenticated (match-string 0)))))))
+      (if authenticated
+          ;; Done with auth... try and deal with other commands
+          (with-current-buffer procbuf
+            (awhile (re-search-forward "[^\n]+\n" nil t)
+              (goto-char it) ; DO move point
+              (shoes-off--handle-request
+               process authenticated (match-string 0))))
+          ;; Else try authentication
+          (awhen (shoes-off-auth (process-buffer process))
+            (destructuring-bind (&key pass user user-info nick) it
+              (awhen (shoes-off--auth-check user pass)
+                (let ((bouncer-spec it))
+                  ;; Note - what goes on the process is the bouncer-spec
+                  (setq authenticated bouncer-spec)
+                  (shoes-off--authenticate process authenticated)
+                  ;; Send the welcome back to the bouncer user
+                  (shoes-off--send-welcome process)))))))))
 
 (defun shoes-off--sentinel (process status)
   "The sentinel on the bouncer server socket."
@@ -306,7 +320,7 @@ What's cached is the full text response of the command.")
   "Join the rcirc bouncer client socket to the server."
   (process-put con :server server))
 
-(defvar rcrirc-bouncer--server-process nil
+(defvar shoes-off--server-process nil
   "The server socket.")
 
 ;;;###autoload
@@ -336,14 +350,14 @@ What's cached is the full text response of the command.")
                 (read-from-minibuffer
                  "Port: " nil nil nil
                  'shoes-off-start--port-history)))
-  (setq rcrirc-bouncer--server-process
+  (setq shoes-off--server-process
         (shoes-off--make-server (string-to-number port))))
 
 ;;;###autoload
 (defun shoes-off-stop ()
   "Stop the bouncer daemon."
   (interactive)
-  (delete-process rcrirc-bouncer--server-process))
+  (delete-process shoes-off--server-process))
 
 
 ;; Bouncer setup
@@ -384,6 +398,12 @@ What's cached is the full text response of the command.")
   "Start the bouncer for USERNAME.
 
 Initiates the upstream IRC connections for the user."
+  (interactive "MUsername to startup: ")
+  (if shoes-off-server-port
+      (unless shoes-off--server-process
+        (shoes-off-start shoes-off-server-port)))
+  (unless shoes-off-config
+    (error "no shoes-off config loaded?"))
   (destructuring-bind
         (&key
          username
