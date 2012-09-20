@@ -37,17 +37,14 @@ You can also just setq it with something like:
                          :channels ("#channel" "#otherchannel"))))))
 }}}
 
-//Currently only ONE upstream mayb be specified.//
-
 Once that is done you need to start a {{{shoes-off}}} session. A
 session is the bouncer's upstream connection to the IRC.
 
 {{{
-(shoes-off-start-session "nicferrier")
+M-x shoes-off-start-session [RET] bouncer-username [RET]
 }}}
 
-This needs to be done in Elisp right now. There's no user way of doing
-this.
+Will start the bouncer session.
 
 Again on the bouncer, you need to start the bouncer server:
 
@@ -57,6 +54,12 @@ M-x shoes-off-start [RET] 6901 [RET]
 
 //6901// is a listener TCP port. It could be anything. Choose wisely.
 
+
+== Auto-starting the bouncer server ==
+
+You can auto-start the bouncer server on session start by configuring
+the {{{shoes-off-server-port}}} variable to be the TCP port you want
+to start on.
 
 == Connecting to a running bouncer ==
 
@@ -76,6 +79,62 @@ the port you selected and use the username and password from the
 }}}
 
 This will connect to the bouncer and everything //should// work.
+
+== Multiple sessions ==
+
+Multiple upstream irc sessions can be bounced.  This is done by
+specifying multiple servers in the server-alist and by connecting to
+services with a qualified username.
+
+For example, give the config:
+
+{{{
+(setq shoes-off-config
+      '((:username "bouncer-username"
+         :password "bouncer-password"
+         :server-alist 
+             (("irc-one.upstream.servername"
+                :nick "nick-at-the-irc-network"
+                :port 6667
+                :user-name "user-name-1"
+                :password "password-1"
+                :full-name "Full Name"
+                :channels ("#channel" "#otherchannel"))
+              ("irc-two.upstream.servername"
+                :nick "nick-at-the-irc-network"
+                :port 6667
+                :user-name "user-name-2"
+                :password "password-2"
+                :full-name "Full Name"
+                :channels ("#channelhere"))))))
+}}}
+
+You can connect to these with:
+
+{{{
+(rcirc-connect 
+    "my-bouncer.example.org"                 
+    6901
+    "bouncer-nick"
+    "bouncer-username@irc-one.upstream.servername"
+    "password" 
+    "Full Name"
+    ("#channel" "#otherchannel"))
+}}}
+
+for the second one:
+
+{{{
+(rcirc-connect 
+    "my-bouncer.example.org"                 
+    6901
+    "bouncer-nick"
+    "bouncer-username@irc-two.upstream.servername"
+    "password" 
+    "Full Name"
+    ("#channel" "#otherchannel"))
+}}}
+
 
 == BUGS ==
 
