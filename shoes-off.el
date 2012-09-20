@@ -71,9 +71,10 @@ bouncer cannot service multiple upstream sessions right now."
                                      (const plain)))))))))))
 
 (defvar shoes-off--sessions (make-hash-table :test 'equal)
-  "Hashtable of bouncer sessions keyed by username.
+  "Hashtable of bouncer sessions keyed by username@servername.
 
-Stores the connections to upstream IRC servers.")
+The values are the upstream connections to the IRC servers.
+These are always `rcirc' connections.")
 
 (defun shoes-off--puthash (process property name value)
   "Make NAME[VALUE] on a hashtable at PROPERTY on the PROCESS."
@@ -85,19 +86,65 @@ Stores the connections to upstream IRC servers.")
       (process-put process property h)
       h))))
 
-(defun shoes-off--auth-check (username password)
-  "Check the USERNAME and PASSWORD against the db.
+(defun shoes-off--service-details (spec)
+  "Get the username and the service from the SPEC.
 
-Returns the full auth details of the user if auth passes."
-  (loop for bouncer in shoes-off-config
+The SPEC is like 'username@service' or just 'username'.
+
+A cons is returned of `username . service' or `t' if there is no
+service."
+  (if (string-match
+       "^\\(.*\\)@\\([A-Za-z.-]+\\)$"
+       spec)
+      (list (match-string 1 spec)
+            (match-string 2 spec))
+      ;; else
+      (list spec t)))
+
+(defun shoes-off--auth-check (username-spec password)
+  "Check the USERNAME-SPEC and PASSWORD against the db.
+
+The USERNAME-SPEC normally comes from the USER option in the IRC
+session.  We support selection of target sessions by postfixed
+usernames.  For example if you have 2 sessions:
+
+  team.example.com
+  irc.freenode.org
+
+Then you can connect to irc.freenode.org by connecting with
+username:
+
+   username@irc.freenode.net
+
+Not using the postfix will just connect the first session in the
+config that matches the username.
+
+The regex used to find the username allows @'s in the username.
+
+If successful returns a list where the first element if the full
+bouncer spec of the user if auth passes.
+
+Returns `nil' if auth is not found."
+  (destructuring-bind (username service)
+      (shoes-off--service-details username-spec)
+    (loop for bouncer in shoes-off-config
        if (and
            (equal
             username
             (plist-get bouncer :username))
            (equal
             password
-            (plist-get bouncer :password)))
-       return bouncer))
+            (plist-get bouncer :password))
+           (or (eq service t)
+               (assoc service (plist-get bouncer :server-alist))))
+       ;; Return the whole bouncer and JUST the service that matched
+       return (list bouncer
+                    (if (eq service t)
+                        (cdar (plist-get bouncer :server-alist))
+                        (aget
+                         (plist-get bouncer :server-alist)
+                         service))))))
+
 
 (defun shoes-off-auth (bouncer-buffer)
   "Retrieve auth details from BOUNCER-BUFFER.
@@ -156,11 +203,13 @@ Unsuccessful auth makes no changes and returns `nil'."
                   data)))
     (process-send-string process cmd-str)))
 
+(defun shoes-off--get-auth-details (process)
+  "Get the auth details from the process."
+  (process-get process :shoes-off-authenticated))
+
 (defun shoes-off--get-session (process)
   "Get the associated session from the client process."
-  (let* ((auth (process-get
-                process
-                :shoes-off-authenticated))
+  (let* ((auth (shoes-off--get-auth-details process))
          (user (plist-get auth :username)))
     (gethash user shoes-off--sessions)))
 
@@ -199,7 +248,7 @@ What's cached is the full text response of the command.")
 
 (defun shoes-off--authenticate (process auth-details)
   "Mark the PROCESS authenticated."
-  (process-put process :shoes-off-authenticated it)
+  (process-put process :shoes-off-authenticated auth-details)
   ;; Mark the upstream session
   (let ((session (shoes-off--get-session process)))
     (process-put session :shoes-off-connection process)))
@@ -234,14 +283,16 @@ What's cached is the full text response of the command.")
         (awhen (shoes-off-auth (process-buffer process))
           (destructuring-bind (&key pass user user-info nick) it
             (awhen (shoes-off--auth-check user pass)
-              (setq authenticated it)
-              (shoes-off--authenticate process authenticated)
-              ;; Send the welcome back to the bouncer user
-              (shoes-off--send-welcome process)))))
+              (destructuring-bind (bouncer-spec server-config) it
+                ;; Note - what goes on the process is the bouncer-spec
+                (setq authenticated bouncer-spec)
+                (shoes-off--authenticate process authenticated)
+                ;; Send the welcome back to the bouncer user
+                (shoes-off--send-welcome process))))))
       ;; Done with auth... try and deal with other commands
       (with-current-buffer procbuf
         (awhile (re-search-forward "[^\n]+\n" nil t)
-          (goto-char it) ; DO move pointq
+          (goto-char it) ; DO move point
           (shoes-off--handle-request
            process authenticated (match-string 0)))))))
 
@@ -345,22 +396,24 @@ Initiates the upstream IRC connections for the user."
              (plist-get bouncer :username))
          return bouncer)
     ;; rcirc-connect has args in a particular order
-    (destructuring-bind
-          (server
-           &key
-           nick port user-name
-           password full-name
-           channels) (car server-alist)
-      ;; Connect the client socket
-      (let* (encryption ; hacked for now
-             (connection
-              (rcirc-connect
-               server port nick user-name
-               full-name channels password encryption)))
-        (puthash
-         username
-         connection
-         shoes-off--sessions)))))
+    (loop for server-config in server-alist
+       do
+         (destructuring-bind
+               (server
+                &key
+                nick port user-name
+                password full-name
+                channels) server-config
+           ;; Connect the client socket
+           (let* (encryption ; hacked for now
+                  (connection
+                   (rcirc-connect
+                    server port nick user-name
+                    full-name channels password encryption)))
+             (puthash
+              (format "%s@%s" username server)
+              connection
+              shoes-off--sessions))))))
 
 (provide 'shoes-off)
 
