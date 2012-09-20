@@ -1,0 +1,73 @@
+
+
+
+* remote call to the bouncer emacs to setup the session
+** need some sort of listener
+*** could be just emacs daemon stuff tho?
+*** or elnode?
+* established irc session
+** hook into data arrival
+** send to bouncer log
+* so the job is managing the client connection and the bouncer log
+** recieve a connection
+*** attach the actual rcirc buffer to it
+*** when stuff arrives in the irc buffer send it back to the socket
+*** when stuff arrives on the socket send it to the irc buffer
+
+* from forcer
+20:55 <forcer> nicferrier: You need to interpret PING (to stay
+               alive), JOIN/PART/KICK (to tell a connecting client
+               which channels they are on), and QUIT (to
+               reconnect). You might want to interpret PRIVMSG and
+               possibly other messages to keep a log and give a
+               connecting client a backlog.
+20:55 *** c0rn_ JOIN
+20:55 <forcer> Plus the related numerics
+20:55 <forcer> (That was from the top of my head, I might have
+missed something important)
+
+* connect to bouncer from rcirc
+** connect is
+*** pass
+*** nick
+*** user
+** we want pass and user to validate?
+*** nick does not matter
+** you already have the rcirc config you need tied to the user?
+** you already have an established rcirc session tied to the user
+
+* when we connect from the bouncer to the upstream irc
+** we need to store these responses for reply
+*** 002 - yourhost
+*** 003 - created (when the server was created)
+*** 004 - myinfo
+*** 005 - bounce (info on where to make alternative connections)
+##
+T 78.46.66.17:6668 -> 172.30.1.109:45223 [AP]
+:moorcock.freenode.net 001 nicferrier :Welcome to the freenode Internet Relay Chat Network nicferrier.
+
+** and issue these commands
+*** /lusers
+*** /motd
+*** 
+
+* bouncer start
+** look up config
+** add 'rcirc-receive-message-hooks hook
+*** called like:
+**** process cmd sender args text
+*** use it to store the data from 002, 003, 004, 005
+**** where do we store them?
+***** on the process plist?
+
+(defun rcirc-bouncer--receive-hook (process cmd sender args text)
+  (message "rcirc bouncer hook: [%s] [%s] [%s] %s"
+           cmd
+	      sender
+           args
+	      text))
+
+
+** use rcirc-connect with the config of the bouncer
+
+
