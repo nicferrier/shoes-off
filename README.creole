@@ -136,6 +136,10 @@ for the second one:
 }}}
 
 
+Unfortunately there is a bug at the moment, you can't do that exactly,
+you must qualify the hostnames, probably by adding host alises to your
+/etc/hosts file.  I will find a way round this.
+
 == BUGS ==
 
 Please report bugs or feature requests to
