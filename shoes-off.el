@@ -6,7 +6,7 @@
 ;; Keywords: comm
 ;; Maintainer: Nic Ferrier <nferrier@ferrier.me.uk>
 ;; Created: 19th September 2012
-;; Version: 0.0.10
+;; Version: 0.1.2
 ;; Package-Requires: ((kv "0.0.5")(anaphora "0.0.2"))
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -150,9 +150,7 @@ Returns `nil' if auth is not found."
                          ;; Pick the first off the server alist
                          (car (plist-get bouncer :server-alist))
                          ;; else pick the specified one
-                         (aget
-                          (plist-get bouncer :server-alist)
-                          service))))
+                         (assoc service (plist-get bouncer :server-alist)))))
                 (plist-put
                  (copy-list bouncer)
                  :username
