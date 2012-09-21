@@ -6,7 +6,7 @@
 ;; Keywords: comm
 ;; Maintainer: Nic Ferrier <nferrier@ferrier.me.uk>
 ;; Created: 19th September 2012
-;; Version: 0.1.2
+;; Version: 0.1.6
 ;; Package-Requires: ((kv "0.0.5")(anaphora "0.0.2"))
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -34,6 +34,7 @@
 (require 'cl)
 (require 'kv)
 (require 'rcirc)
+(require 'assoc)
 
 (defgroup shoes-off nil
   "An irc bouncer."
@@ -106,6 +107,17 @@ service."
             (match-string 2 spec))
       ;; else
       (list spec t)))
+
+(defun shoes-off--server-name (process)
+  "Get the server name from the PROCESS.
+
+The server name is set from the WELCOME message when the session
+is started.  It's possible that the WELCOME message never arrives
+so we provide a default."
+  (aif (process-get process :shoes-off-server-name)
+      (substring it 1)
+    ;; this is a bad choice... do something better
+    "localhost"))
 
 (defun shoes-off--auth-check (username-spec password)
   "Check the USERNAME-SPEC and PASSWORD against the db.
@@ -205,7 +217,7 @@ Unsuccessful auth makes no changes and returns `nil'."
 
 (defun shoes-off--send-command (process cmd data)
   "Send the CMD with the DATA to the PROCESS using IRC protocol."
-  (let* ((hostname (process-get process :shoes-off-server-name))
+  (let* ((hostname (shoes-off--server-name process))
          (cmd-num (aget shoes-off--cmd-numbers cmd))
          (cmd-str
           (format "%s %03d %s\n"
@@ -237,11 +249,8 @@ What's cached is the full text response of the command.")
 (defun shoes-off--send-welcome (process)
   "Send the welcome stuff to PROCESS, a server connection."
   (let* ((session (shoes-off--get-session process))
-         (hostname (substring
-                    (process-get session :shoes-off-server-name)
-                    1))
+         (hostname (shoes-off--server-name process))
          (welcome-cache (process-get session :shoes-off-welcome-cache)))
-    (process-put process :shoes-off-server-name hostname)
     (loop for cmd in shoes-off--cache-response-welcome-commands
        do (shoes-off--send-command
            process cmd (gethash cmd welcome-cache)))
@@ -365,6 +374,12 @@ What's cached is the full text response of the command.")
                :shoes-off-server-name
                (car (split-string text " "))))
 
+(defun shoes-off--join (process args text)
+  "Process JOIN messages."
+  (let ((channel (car args)))
+    (string-match "^\\(.*\\) JOIN \\(.*\\)" text)
+    (concat (match-string 1 str) " JOIN " channel)))
+
 (defun shoes-off--receive-hook (process cmd sender args text)
   "Hook attached to rcirc to interpret the upstream irc server."
   (condition-case nil
@@ -379,8 +394,7 @@ What's cached is the full text response of the command.")
           (shoes-off--puthash
            process :shoes-off-welcome-cache cmdstr text))
         (when (equal cmdstr "JOIN")
-          (shoes-off--puthash
-           process :shoes-off-channel-cache (car args) text))
+          (shoes-off--join process args text))
         ;; if we have a current bouncer con then send stuff there
         (awhen (process-get process :shoes-off-connection)
           (rcirc-send-string it text)))
