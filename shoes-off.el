@@ -6,7 +6,7 @@
 ;; Keywords: comm
 ;; Maintainer: Nic Ferrier <nferrier@ferrier.me.uk>
 ;; Created: 19th September 2012
-;; Version: 0.1.7
+;; Version: 0.1.8
 ;; Package-Requires: ((kv "0.0.5")(anaphora "0.0.4"))
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -264,7 +264,8 @@ What's cached is the full text response of the command.")
         (maphash
          (lambda (channel response)
            ;; Have to send these directly
-           (process-send-string process response)) hash)))))
+	   (message "shoes: sending JOIN |%s| to [%s]" response channel)
+           (process-send-string process (concat response "\n"))) hash)))))
 
 (defun shoes-off--authenticate (process auth-details)
   "Mark the PROCESS authenticated."
@@ -373,13 +374,16 @@ What's cached is the full text response of the command.")
   (process-put process
                :shoes-off-server-name
                (car (split-string text " "))))
+(defun shoes-off--process-nick (process)
+  "Get the NICK off the rcirc PROCESS."
+  (with-current-buffer
+      (process-buffer process)
+    (substring-no-properties rcirc-nick 0)))
 
 (defun shoes-off--join (process args text)
   "Process JOIN messages."
   (let (nick
-        (mynick (with-current-buffer
-                    (process-buffer process)
-                  (substring-no-properties rcirc-nick 0)))
+        (mynick (shoes-off--process-nick process))
         (channel (car args)))
     (string-match "[|:]+\\([^!]+\\).*" text)
     (setq nick (match-string 1 text))
@@ -389,6 +393,18 @@ What's cached is the full text response of the command.")
       (shoes-off--puthash
        process :shoes-off-channel-cache channel
        (concat (match-string 1 text) " JOIN " channel)))))
+
+(defun shoes-off--part (process args text)
+  "Remove channels from the join cache that we're parting."
+  (let (nick
+        (mynick (shoes-off--process-nick process))
+        (channel (car args)))
+    (string-match "[|:]+\\([^!]+\\).*" text)
+    (setq nick (match-string 1 text))
+    (when (equal nick mynick)
+      (remhash
+       channel
+       (process-get process :shoes-off-channel-cache)))))
 
 (defun shoes-off--receive-hook (process cmd sender args text)
   "Hook attached to rcirc to interpret the upstream irc server."
@@ -403,6 +419,9 @@ What's cached is the full text response of the command.")
                shoes-off--cache-response-welcome-commands)
           (shoes-off--puthash
            process :shoes-off-welcome-cache cmdstr text))
+        (when (equal cmdstr "PART")
+          (message "shoes-off [%s] %s (%s) |%s|" process cmd args text)
+          (shoes-off--part process args text))
         (when (equal cmdstr "JOIN")
           (shoes-off--join process args text))
         ;; if we have a current bouncer con then send stuff there
