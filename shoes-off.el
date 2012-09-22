@@ -6,8 +6,8 @@
 ;; Keywords: comm
 ;; Maintainer: Nic Ferrier <nferrier@ferrier.me.uk>
 ;; Created: 19th September 2012
-;; Version: 0.1.6
-;; Package-Requires: ((kv "0.0.5")(anaphora "0.0.2"))
+;; Version: 0.1.7
+;; Package-Requires: ((kv "0.0.5")(anaphora "0.0.4"))
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -376,9 +376,19 @@ What's cached is the full text response of the command.")
 
 (defun shoes-off--join (process args text)
   "Process JOIN messages."
-  (let ((channel (car args)))
-    (string-match "^\\(.*\\) JOIN \\(.*\\)" text)
-    (concat (match-string 1 str) " JOIN " channel)))
+  (let (nick
+        (mynick (with-current-buffer
+                    (process-buffer process)
+                  (substring-no-properties rcirc-nick 0)))
+        (channel (car args)))
+    (string-match "[|:]+\\([^!]+\\).*" text)
+    (setq nick (match-string 1 text))
+    (when (equal nick mynick)
+      ;; Fix the join response
+      (string-match "^\\(.*\\) JOIN \\(.*\\)" text)
+      (shoes-off--puthash
+       process :shoes-off-channel-cache channel
+       (concat (match-string 1 text) " JOIN " channel)))))
 
 (defun shoes-off--receive-hook (process cmd sender args text)
   "Hook attached to rcirc to interpret the upstream irc server."
