@@ -77,14 +77,17 @@ will start all of them and qualify access to them like
                 (:encryption (choice (const tls)
                                      (const plain)))))))))))
 
-(defvar shoes-off--sessions (make-hash-table :test 'equal)
+
+(defvar shoes-off/sessions (make-hash-table :test 'equal)
   "Hashtable of bouncer sessions keyed by username@servername.
 
 The values are the upstream connections to the IRC servers.
 These are always `rcirc' connections.")
 
-(defun shoes-off--puthash (process property name value)
-  "Make NAME[VALUE] on a hashtable at PROPERTY on the PROCESS."
+(defun shoes-off/puthash (process property name value)
+  "Make NAME[VALUE] on a hashtable at PROPERTY on the PROCESS.
+
+Makes the hashtable on the process if it doesn't already exist."
   (puthash
    name value
    (or
@@ -93,7 +96,15 @@ These are always `rcirc' connections.")
       (process-put process property h)
       h))))
 
-(defun shoes-off--service-details (spec)
+(defun shoes-off/add-to-list (process property value)
+  "Add VALUE to the list in PROPERTY on the PROCESS."
+  (let ((lst (process-get process property)))
+    (if lst
+        (process-put process property (append lst (list value)))
+        ;; Else it's a new list
+        (process-put process property (list value)))))
+
+(defun shoes-off/service-details (spec)
   "Get the username and the service from the SPEC.
 
 The SPEC is like 'username@service' or just 'username'.
@@ -108,7 +119,7 @@ service."
       ;; else
       (list spec t)))
 
-(defun shoes-off--server-name (process)
+(defun shoes-off/server-name (process)
   "Get the server name from the PROCESS.
 
 The server name is set from the WELCOME message when the session
@@ -119,7 +130,59 @@ so we provide a default."
     ;; this is a bad choice... do something better
     "localhost"))
 
-(defun shoes-off--auth-check (username-spec password)
+;; Support stuff
+
+(defun shoes-off/bouncer-server (bouncer-spec &optional server)
+  "Retrieve the server-alist from the BOUNCER-SPEC.
+
+Optionally retrieve only the specified SERVER."
+  (let ((servers (plist-get bouncer-spec :server-alist)))
+    (if server
+        (aget servers server)
+        servers)))
+
+
+
+;; Config abstraction
+;;
+;; we can replace these functions with functions that look up user
+;; config data elsewhere
+
+(defvar shoes-off/get-config-plugin nil
+  "You can add a plugin get-config function here.")
+
+(defvar shoes-off/auth-plugin nil
+  "You can add a plugin auth function here.")
+
+(defvar shoes-off/rcirc-connect-plugin nil
+  "You can add a plugin for rcirc-connect for sessions here.")
+
+
+(defun shoes-off/get-config (username-spec)
+  "Get the shoes-off config for USERNAME."
+  (if (functionp shoes-off/get-config-plugin)
+      (funcall shoes-off/get-config-plugin  username-spec)
+      ;; Else call the default
+      (shoes-off/get-config-impl username-spec)))
+
+(defun shoes-off/get-config-impl (username)
+  "Get the shoes-off config for USERNAME."
+  (loop for bouncer in shoes-off-config
+     if (equal
+         username
+         (plist-get bouncer :username))
+     return bouncer))
+
+(defun shoes-off/auth-check (username-spec password)
+  "Call the implementation auth check.
+
+There's abstraction here so you replace the auth database."
+  (if (functionp shoes-off/auth-plugin)
+      (funcall shoes-off/auth-plugin username-spec password)
+      ;; Else call the default
+      (shoes-off/auth-check-impl username-spec password)))
+
+(defun shoes-off/auth-check-impl (username-spec password)
   "Check the USERNAME-SPEC and PASSWORD against the db.
 
 The USERNAME-SPEC normally comes from the USER option in the IRC
@@ -144,7 +207,7 @@ transformed to the server qualified version.
 
 Returns `nil' if auth is not found."
   (destructuring-bind (username service)
-      (shoes-off--service-details username-spec)
+      (shoes-off/service-details username-spec)
     (loop for bouncer in shoes-off-config
        if (and
            (equal
@@ -168,6 +231,9 @@ Returns `nil' if auth is not found."
                  :username
                  (format "%s@%s" username (car server)))))))
 
+
+
+;; IRC server stuff
 
 (defun shoes-off-auth (bouncer-buffer)
   "Retrieve auth details from BOUNCER-BUFFER.
@@ -200,25 +266,26 @@ Unsuccessful auth makes no changes and returns `nil'."
         (goto-char pt)
         details))))
 
-(defconst shoes-off--cmd-numbers
+(defconst shoes-off/cmd-numbers
   '(("WELCOME" . 1)
     ("YOURHOST" . 2)
     ("CREATED" . 3)
     ("MYINFO" . 4)
     ("BOUNCE" . 5)
+    ("RPL_LIST" . 322)
     )
   "Command numbers for each of the IRC commands.")
 
-(defconst shoes-off--cmd-names
+(defconst shoes-off/cmd-names
   (mapcar
    (lambda (pair)
      (cons (cdr pair) (car pair)))
-   shoes-off--cmd-numbers))
+   shoes-off/cmd-numbers))
 
-(defun shoes-off--send-command (process cmd data)
+(defun shoes-off/send-command (process cmd data)
   "Send the CMD with the DATA to the PROCESS using IRC protocol."
-  (let* ((hostname (shoes-off--server-name process))
-         (cmd-num (aget shoes-off--cmd-numbers cmd))
+  (let* ((hostname (shoes-off/server-name process))
+         (cmd-num (aget shoes-off/cmd-numbers cmd))
          (cmd-str
           (format "%s %03d %s\n"
                   hostname
@@ -226,18 +293,18 @@ Unsuccessful auth makes no changes and returns `nil'."
                   data)))
     (process-send-string process cmd-str)))
 
-(defun shoes-off--get-auth-details (process)
+(defun shoes-off/get-auth-details (process)
   "Get the auth details from the process."
   (process-get process :shoes-off-authenticated))
 
-(defun shoes-off--get-session (process)
+(defun shoes-off/get-session (process)
   "Get the associated session from the client process."
-  (let* ((auth (shoes-off--get-auth-details process))
+  (let* ((auth (shoes-off/get-auth-details process))
          (user (plist-get auth :username)))
-    (gethash user shoes-off--sessions)))
+    (gethash user shoes-off/sessions)))
 
 
-(defconst shoes-off--cache-response-welcome-commands
+(defconst shoes-off/cache-response-welcome-commands
   '("WELCOME" "YOURHOST" "CREATED" "MYINFO" "BOUNCE")
   "The command responses we cache on the session for welcome.
 
@@ -246,13 +313,13 @@ generate the welcome.
 
 What's cached is the full text response of the command.")
 
-(defun shoes-off--send-welcome (process)
+(defun shoes-off/send-welcome (process)
   "Send the welcome stuff to PROCESS, a server connection."
-  (let* ((session (shoes-off--get-session process))
-         (hostname (shoes-off--server-name process))
+  (let* ((session (shoes-off/get-session process))
+         (hostname (shoes-off/server-name process))
          (welcome-cache (process-get session :shoes-off-welcome-cache)))
-    (loop for cmd in shoes-off--cache-response-welcome-commands
-       do (shoes-off--send-command
+    (loop for cmd in shoes-off/cache-response-welcome-commands
+       do (shoes-off/send-command
            process cmd (gethash cmd welcome-cache)))
     ;; then do lusers and motd
     ;;send-command to user's process and pull it back here
@@ -267,14 +334,14 @@ What's cached is the full text response of the command.")
 	   (message "shoes: sending JOIN |%s| to [%s]" response channel)
            (process-send-string process (concat response "\n"))) hash)))))
 
-(defun shoes-off--authenticate (process auth-details)
+(defun shoes-off/authenticate (process auth-details)
   "Mark the PROCESS authenticated."
   (process-put process :shoes-off-authenticated auth-details)
   ;; Mark the upstream session
-  (let ((session (shoes-off--get-session process)))
+  (let ((session (shoes-off/get-session process)))
     (process-put session :shoes-off-connection process)))
 
-(defun shoes-off--get-or-create-process-buffer (process)
+(defun shoes-off/get-or-create-process-buffer (process)
   "Get the process buffer (or create it)."
   (or
    (process-buffer process)
@@ -286,15 +353,15 @@ What's cached is the full text response of the command.")
      (set-process-buffer process buffer)
      (process-buffer process))))
 
-(defun shoes-off--handle-request (process authenticated request)
+(defun shoes-off/handle-request (process authenticated request)
   "Handle the request."
   (destructuring-bind (command &rest args) (split-string request " ")
-    (let ((session (shoes-off--get-session process)))
+    (let ((session (shoes-off/get-session process)))
       (rcirc-send-string session request))))
 
-(defun shoes-off--filter (process data)
+(defun shoes-off/filter (process data)
   "Stuff from the bouncer's client."
-  (let ((procbuf (shoes-off--get-or-create-process-buffer process)))
+  (let ((procbuf (shoes-off/get-or-create-process-buffer process)))
     (with-current-buffer procbuf
       (save-excursion
         (goto-char (point-max))
@@ -305,34 +372,34 @@ What's cached is the full text response of the command.")
           (with-current-buffer procbuf
             (awhile (re-search-forward "[^\n]+\n" nil t)
               (goto-char it) ; DO move point
-              (shoes-off--handle-request
+              (shoes-off/handle-request
                process authenticated (match-string 0))))
           ;; Else try authentication
           (awhen (shoes-off-auth (process-buffer process))
             (destructuring-bind (&key pass user user-info nick) it
-              (awhen (shoes-off--auth-check user pass)
+              (awhen (shoes-off/auth-check user pass)
                 (let ((bouncer-spec it))
                   ;; Note - what goes on the process is the bouncer-spec
                   (setq authenticated bouncer-spec)
-                  (shoes-off--authenticate process authenticated)
+                  (shoes-off/authenticate process authenticated)
                   ;; Send the welcome back to the bouncer user
-                  (shoes-off--send-welcome process)))))))))
+                  (shoes-off/send-welcome process)))))))))
 
-(defun shoes-off--sentinel (process status)
+(defun shoes-off/sentinel (process status)
   "The sentinel on the bouncer server socket."
   (message
    "RCIRC BOUNCER KLAXON: [%s] %s"
    process status))
 
-(defun shoes-off--log-fn (server con msg)
+(defun shoes-off/log-fn (server con msg)
   "Join the rcirc bouncer client socket to the server."
   (process-put con :server server))
 
-(defvar shoes-off--server-process nil
+(defvar shoes-off/server-process nil
   "The server socket.")
 
 ;;;###autoload
-(defun shoes-off--make-server (port)
+(defun shoes-off/make-server (port)
   "Make the listening server socket."
   (let ((buf (get-buffer-create "*shoes-off*")))
     (make-network-process
@@ -344,12 +411,12 @@ What's cached is the full text response of the command.")
      :service port
      :coding '(raw-text-unix . raw-text-unix)
      :family 'ipv4
-     :filter 'shoes-off--filter
-     :sentinel 'shoes-off--sentinel
-     :log 'shoes-off--log-fn
+     :filter 'shoes-off/filter
+     :sentinel 'shoes-off/sentinel
+     :log 'shoes-off/log-fn
      :plist (list :shoes-off-example-prop t))))
 
-(defvar shoes-off-start--port-history nil)
+(defvar shoes-off-start/port-history nil)
 
 ;;;###autoload
 (defun shoes-off-start (port)
@@ -357,47 +424,48 @@ What's cached is the full text response of the command.")
   (interactive (list
                 (read-from-minibuffer
                  "Port: " nil nil nil
-                 'shoes-off-start--port-history)))
-  (setq shoes-off--server-process
-        (shoes-off--make-server (string-to-number port))))
+                 'shoes-off-start/port-history)))
+  (setq shoes-off/server-process
+        (shoes-off/make-server (string-to-number port))))
 
 ;;;###autoload
 (defun shoes-off-stop ()
   "Stop the bouncer daemon."
   (interactive)
-  (delete-process shoes-off--server-process))
+  (delete-process shoes-off/server-process))
 
 
 ;; Bouncer setup
 
-(defun shoes-off--welcome (process text)
+(defun shoes-off/welcome (process text)
   (process-put process
                :shoes-off-server-name
                (car (split-string text " "))))
-(defun shoes-off--process-nick (process)
+
+(defun shoes-off/process-nick (process)
   "Get the NICK off the rcirc PROCESS."
   (with-current-buffer
       (process-buffer process)
     (substring-no-properties rcirc-nick 0)))
 
-(defun shoes-off--join (process args text)
+(defun shoes-off/join (process args text)
   "Process JOIN messages."
   (let (nick
-        (mynick (shoes-off--process-nick process))
+        (mynick (shoes-off/process-nick process))
         (channel (car args)))
     (string-match "[|:]+\\([^!]+\\).*" text)
     (setq nick (match-string 1 text))
     (when (equal nick mynick)
       ;; Fix the join response
       (string-match "^\\(.*\\) JOIN \\(.*\\)" text)
-      (shoes-off--puthash
+      (shoes-off/puthash
        process :shoes-off-channel-cache channel
        (concat (match-string 1 text) " JOIN " channel)))))
 
-(defun shoes-off--part (process args text)
+(defun shoes-off/part (process args text)
   "Remove channels from the join cache that we're parting."
   (let (nick
-        (mynick (shoes-off--process-nick process))
+        (mynick (shoes-off/process-nick process))
         (channel (car args)))
     (string-match "[|:]+\\([^!]+\\).*" text)
     (setq nick (match-string 1 text))
@@ -406,24 +474,45 @@ What's cached is the full text response of the command.")
        channel
        (process-get process :shoes-off-channel-cache)))))
 
-(defun shoes-off--receive-hook (process cmd sender args text)
+(defun shoes-off-get-channels (process)
+  "Return a channel list."
+  ;; Force a listing - NB THIS IS DISASTROUS ON FREENODE
+  ;; anything with a long channel list will die.
+  (with-current-buffer (process-buffer process)
+    (save-excursion
+      (goto-char (point-max))
+      (insert "/list")
+      (rcirc-send-input)))
+  (process-get process :shoes-off-channel-list))
+
+(defun shoes-off/list-entry (process nick channel user-count)
+  "Handle a channel list entry response."
+  (shoes-off/add-to-list
+   process
+   :shoes-off-channel-list
+   channel))
+
+(defun shoes-off/receive-hook (process cmd sender args text)
   "Hook attached to rcirc to interpret the upstream irc server."
+  ;; (message "proc %s cmd %s sender %s args %s text %s" process cmd sender args text)
   (condition-case nil
-      (let ((cmdstr (or
-                     (aget shoes-off--cmd-names (string-to-number cmd))
-                     cmd)))
+      (let ((cmdstr
+             (or (aget shoes-off/cmd-names (string-to-number cmd)) cmd)))
+        (when (equal cmdstr "RPL_LIST")
+          (apply 'shoes-off/list-entry process args))
         (when (equal cmdstr "WELCOME")
-          (shoes-off--welcome process text))
+          (shoes-off/welcome process text))
         (when (member
                cmdstr
-               shoes-off--cache-response-welcome-commands)
-          (shoes-off--puthash
-           process :shoes-off-welcome-cache cmdstr text))
+               shoes-off/cache-response-welcome-commands)
+          (shoes-off/puthash process
+                             :shoes-off-welcome-cache
+                             cmdstr text))
         (when (equal cmdstr "PART")
           (message "shoes-off [%s] %s (%s) |%s|" process cmd args text)
-          (shoes-off--part process args text))
+          (shoes-off/part process args text))
         (when (equal cmdstr "JOIN")
-          (shoes-off--join process args text))
+          (shoes-off/join process args text))
         ;; if we have a current bouncer con then send stuff there
         (awhen (process-get process :shoes-off-connection)
           (rcirc-send-string it text)))
@@ -432,7 +521,8 @@ What's cached is the full text response of the command.")
 ;; Setup the receive hook for the upstream IRC connection
 (add-hook
  'rcirc-receive-message-hooks
- 'shoes-off--receive-hook)
+ 'shoes-off/receive-hook)
+
 
 ;;;###autoload
 (defun shoes-off-start-session (username)
@@ -441,21 +531,13 @@ What's cached is the full text response of the command.")
 Initiates the upstream IRC connections for the user."
   (interactive "MUsername to startup: ")
   (if shoes-off-server-port
-      (unless shoes-off--server-process
+      (unless shoes-off/server-process
         (shoes-off-start shoes-off-server-port)))
-  (unless shoes-off-config
-    (error "no shoes-off config loaded?"))
   (destructuring-bind
         (&key
          username
          password
-         server-alist)
-      ;; Find the bouncer config by the username
-      (loop for bouncer in shoes-off-config
-         if (equal
-             username
-             (plist-get bouncer :username))
-         return bouncer)
+         server-alist) (shoes-off/get-config username)
     ;; rcirc-connect has args in a particular order
     (loop for server-config in server-alist
        do
@@ -468,13 +550,18 @@ Initiates the upstream IRC connections for the user."
            ;; Connect the client socket
            (let* (encryption ; hacked for now
                   (connection
-                   (rcirc-connect
-                    server port nick user-name
-                    full-name channels password encryption)))
+                   (if (functionp shoes-off/rcirc-connect-plugin)
+                       (funcall shoes-off/rcirc-connect-plugin
+                                server port nick user-name
+                                full-name channels password encryption)
+                       ;; Else we just use plain rcirc-connect
+                       (rcirc-connect
+                        server port nick user-name
+                        full-name channels password encryption))))
              (puthash
               (format "%s@%s" username server)
               connection
-              shoes-off--sessions))))))
+              shoes-off/sessions))))))
 
 (provide 'shoes-off)
 
