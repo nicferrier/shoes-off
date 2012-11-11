@@ -6,7 +6,7 @@
 ;; Keywords: comm
 ;; Maintainer: Nic Ferrier <nferrier@ferrier.me.uk>
 ;; Created: 19th September 2012
-;; Version: 0.1.8
+;; Version: 0.1.9
 ;; Package-Requires: ((kv "0.0.5")(anaphora "0.0.4"))
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -494,7 +494,8 @@ What's cached is the full text response of the command.")
 
 (defun shoes-off/receive-hook (process cmd sender args text)
   "Hook attached to rcirc to interpret the upstream irc server."
-  ;; (message "proc %s cmd %s sender %s args %s text %s" process cmd sender args text)
+  ;; (message "proc %s cmd %s sender %s args %s text %s"
+  ;;    process cmd sender args text)
   (condition-case nil
       (let ((cmdstr
              (or (aget shoes-off/cmd-names (string-to-number cmd)) cmd)))
