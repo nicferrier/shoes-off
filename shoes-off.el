@@ -475,23 +475,26 @@ What's cached is the full text response of the command.")
        channel
        (process-get process :shoes-off-channel-cache)))))
 
-(defun shoes-off-get-channels (process)
+(defun shoes-off-get-channels (proc-name)
   "Return a channel list."
   ;; Force a listing - NB THIS IS DISASTROUS ON FREENODE
   ;; anything with a long channel list will die.
-  (with-current-buffer (process-buffer process)
-    (save-excursion
-      (goto-char (point-max))
-      (insert "/list")
-      (rcirc-send-input)))
-  (process-get process :shoes-off-channel-list))
+  (let ((proc (get-process proc-name)))
+    (with-current-buffer (process-buffer proc)
+      (save-excursion
+        (goto-char (point-max))
+        (insert "/list")
+        (rcirc-send-input)))
+    (process-get proc :shoes-off-channel-list)))
 
 (defun shoes-off/list-entry (process nick channel user-count)
   "Handle a channel list entry response."
-  (shoes-off/add-to-list
-   process
-   :shoes-off-channel-list
-   channel))
+  (let ((lst (process-get process :shoes-off-channel-list)))
+    (unless (member channel lst)
+      (shoes-off/add-to-list
+       process
+       :shoes-off-channel-list
+       channel))))
 
 (defun shoes-off/receive-hook (process cmd sender args text)
   "Hook attached to rcirc to interpret the upstream irc server."
