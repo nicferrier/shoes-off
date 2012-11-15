@@ -300,8 +300,9 @@ Unsuccessful auth makes no changes and returns `nil'."
 (defun shoes-off/get-session (process)
   "Get the associated session from the client process."
   (let* ((auth (shoes-off/get-auth-details process))
-         (user (plist-get auth :username)))
-    (gethash user shoes-off/sessions)))
+         (user (plist-get auth :username))
+         (server (plist-get auth :server-alist)))
+    (gethash (format "%s@%s" user server) shoes-off/sessions)))
 
 
 (defconst shoes-off/cache-response-welcome-commands
@@ -560,6 +561,7 @@ Initiates the upstream IRC connections for the user."
                         server port nick user-name
                         full-name channels password encryption))))
              (puthash
+              ;; Store the session against the key: username@server
               (format "%s@%s" username server)
               connection
               shoes-off/sessions))))))
