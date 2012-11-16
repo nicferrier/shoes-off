@@ -359,8 +359,14 @@ What's cached is the full text response of the command.")
 (defun shoes-off/handle-request (process authenticated request)
   "Handle the request."
   (destructuring-bind (command &rest args) (split-string request " ")
-    (let ((session (shoes-off/get-session process)))
-      (rcirc-send-string session request))))
+    (case (intern command)
+      ('QUIT
+       (message
+        "shoes-off bouncer disconnect %s"
+        (plist-get authenticated :username)))
+      (t
+       (let ((session (shoes-off/get-session process)))
+         (rcirc-send-string session request))))))
 
 (defun shoes-off/filter (process data)
   "Stuff from the bouncer's client."
