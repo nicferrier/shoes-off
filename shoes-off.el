@@ -332,8 +332,10 @@ What's cached is the full text response of the command.")
         (maphash
          (lambda (channel response)
            ;; Have to send these directly
-	   (message "shoes: sending JOIN |%s| to [%s]" response channel)
-           (process-send-string process (concat response "\n"))) hash)))))
+	   (message "shoes-off sending JOIN |%s| to [%s]" response channel)
+           (process-send-string process (concat response "\n"))
+           ;; FIXME send the /names as well
+           ) hash)))))
 
 (defun shoes-off/authenticate (process auth-details)
   "Mark the PROCESS authenticated."
