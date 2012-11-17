@@ -302,7 +302,7 @@ Unsuccessful auth makes no changes and returns `nil'."
   (let* ((auth (shoes-off/get-auth-details process))
          (user (plist-get auth :username))
          (server (plist-get auth :server-alist)))
-    (gethash (format "%s@%s" user server) shoes-off/sessions)))
+    (gethash (format "%s@%s" user (caar server)) shoes-off/sessions)))
 
 
 (defconst shoes-off/cache-response-welcome-commands
