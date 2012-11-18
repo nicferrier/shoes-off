@@ -408,7 +408,7 @@ What's cached is the full text response of the command.")
 (defun shoes-off/sentinel (process status)
   "The sentinel on the bouncer server socket."
   (message
-   "RCIRC BOUNCER KLAXON: [%s] %s"
+   "shoes-off klaxon: [%s] %s"
    process status))
 
 (defun shoes-off/log-fn (server con msg)
