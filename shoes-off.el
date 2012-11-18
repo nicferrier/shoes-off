@@ -248,18 +248,21 @@ with the following data and keys:
 
 Unsuccessful auth makes no changes and returns `nil'."
   (with-current-buffer bouncer-buffer
-    (let* (details
-           (pt
-            (save-excursion
-              (goto-char (point-min))
-              (when (re-search-forward "^PASS \\(.*\\)\n" nil t)
-                (setq details (plist-put details :pass (match-string 1)))
-                (when (re-search-forward "^NICK \\(.*\\)\n" nil t)
-                  (setq details (plist-put details :nick (match-string 1))))
-                (when (re-search-forward "^USER \\(.*?\\) \\(.*\\)\n" nil t)
-                  (setq details (plist-put details :user (match-string 1)))
-                  (setq details (plist-put details :user-info (match-string 2)))
-                  (point))))))
+    (let*
+        (details
+         (pt
+          (save-excursion
+            (goto-char (point-min))
+            (when (re-search-forward "^PASS \\([^\n\r]+\\)[\r\n]" nil t)
+              (setq details (plist-put details :pass (match-string 1)))
+              (when (re-search-forward "^NICK \\([^\n\r]+\\)[\r\n]" nil t)
+                (setq details (plist-put details :nick (match-string 1))))
+              (when (re-search-forward
+                     "^USER \\([^ \n\r]+\\) \\([^\n\r]+\\)[\r\n]"
+                     nil t)
+                (setq details (plist-put details :user (match-string 1)))
+                (setq details (plist-put details :user-info (match-string 2)))
+                (point))))))
       (when (and (plist-get details :pass)
                  (plist-get details :user)
                  (plist-get details :nick))
