@@ -296,6 +296,14 @@ Unsuccessful auth makes no changes and returns `nil'."
                   data)))
     (process-send-string process cmd-str)))
 
+(defun shoes-off/send-to-channel (process channel data)
+  "Send DATA to CHANNEL which belongs to IRC session PROCESS."
+  (let ((channel-name (concat channel "@" (process-name process))))
+    (with-current-buffer (get-buffer channel-name)
+      (goto-char (point-max))
+      (insert data)
+      (rcirc-send-input))))
+
 (defun shoes-off/get-auth-details (process)
   "Get the auth details from the process."
   (process-get process :shoes-off-authenticated))
@@ -335,10 +343,10 @@ What's cached is the full text response of the command.")
         (maphash
          (lambda (channel response)
            ;; Have to send these directly
-	   (message "shoes-off sending JOIN |%s| to [%s]" response channel)
+           (message "shoes-off sending JOIN |%s| to [%s]" response channel)
            (process-send-string process (concat response "\n"))
-           ;; FIXME send the /names as well
-           ) hash)))))
+           (shoes-off/send-to-channel session channel "/names"))
+         hash)))))
 
 (defun shoes-off/authenticate (process auth-details)
   "Mark the PROCESS authenticated."
