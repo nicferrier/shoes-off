@@ -397,6 +397,8 @@ What's cached is the full text response of the command.")
           ;; Else try authentication
           (awhen (shoes-off-auth (process-buffer process))
             (destructuring-bind (&key pass user user-info nick) it
+              (message "shoes-off trying auth for %s <%s>" user nick)
+              ;; think we need to get proc in here as well
               (awhen (shoes-off/auth-check user pass)
                 (let ((bouncer-spec it))
                   ;; Note - what goes on the process is the bouncer-spec
@@ -409,7 +411,7 @@ What's cached is the full text response of the command.")
   "The sentinel on the bouncer server socket."
   (message
    "shoes-off klaxon: [%s] %s"
-   process status))
+   process (replace-regexp-in-string "[\n\r]$" "" status)))
 
 (defun shoes-off/log-fn (server con msg)
   "Join the rcirc bouncer client socket to the server."
