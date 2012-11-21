@@ -231,8 +231,6 @@ Returns `nil' if auth is not found."
                  :username
                  (format "%s@%s" username (car server)))))))
 
-
-
 ;; IRC server stuff
 
 (defun shoes-off-auth (bouncer-buffer)
