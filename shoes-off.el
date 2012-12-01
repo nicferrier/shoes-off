@@ -365,17 +365,50 @@ What's cached is the full text response of the command.")
      (set-process-buffer process buffer)
      (process-buffer process))))
 
+(defvar shoes-off-privmsg-plugin nil
+  "Plugin for handling privmsg calls.
+
+Any function here gets called like:
+
+  (fn username args text)
+
+Where `username' is the shoes-off username (the username of the
+user using the bouncer) and `args' is IRC arguments to the
+PRIVMSG call and `text' is the text to be sent.  This is most
+often the destination of the PRIVMSG such as a channel or a
+nick.
+
+If the plugin throws `:shoes-off-escape-privmsg' then the privmsg
+is not sent to the IRC session.")
+
+(defconst shoes-off/handle-request-privmsg-logging nil
+  "Whether to log privmsg's or not.")
+
 (defun shoes-off/handle-request (process authenticated request)
   "Handle the request."
-  (destructuring-bind (command &rest args) (split-string request " ")
-    (case (intern command)
-      ('QUIT
-       (message
-        "shoes-off bouncer disconnect %s"
-        (plist-get authenticated :username)))
-      (t
-       (let ((session (shoes-off/get-session process)))
-         (rcirc-send-string session request))))))
+  (string-match "\\([A-Z]+\\) \\([^ ]+\\)\\( :\\(.*\\)\\)*" request)
+  (destructuring-bind
+        (command args text) (list
+                             (match-string-no-properties 1 request)
+                             (match-string-no-properties 2 request)
+                             (match-string-no-properties 4 request))
+    (let ((username (plist-get authenticated :username))
+          (command-sym (intern command)))
+      (case command-sym
+        ('QUIT
+         (message "shoes-off bouncer disconnect %s" username))
+        (t
+         (let ((session (shoes-off/get-session process)))
+           (catch :shoes-off-escape-privmsg
+             (when (and (eq command-sym 'PRIVMSG)
+                        (functionp shoes-off-privmsg-plugin))
+               (when shoes-off/handle-request-privmsg-logging
+                 (message
+                  "shoes-off/handle-request %s %S /%s/"
+                  username args text))
+               (funcall
+                shoes-off-privmsg-plugin username args text process))
+             (rcirc-send-string session request))))))))
 
 (defun shoes-off/filter (process data)
   "Stuff from the bouncer's client."
@@ -515,10 +548,27 @@ What's cached is the full text response of the command.")
        :shoes-off-channel-list
        channel))))
 
+(defvar shoes-off-receive-privmsg-plugin nil
+  "Plugin that shoes-off calls with all privmsgs.
+
+If this is a set to a function then shoes-off will call it with any
+privmsg providing:
+
+  process sender args
+
+If the plugin throws `:shoes-off-escape-privmsg' then shoes-off
+does NOT send the privmsg to the bouncer.")
+
+(defconst shoes-off/receive-hook-logging nil
+  "Whether to log stuff from the rcirc receive-hook or not.")
+
 (defun shoes-off/receive-hook (process cmd sender args text)
   "Hook attached to rcirc to interpret the upstream irc server."
-  ;; (message "proc %s cmd %s sender %s args %s text %s"
-  ;;    process cmd sender args text)
+  (when shoes-off/receive-hook-logging
+    (message
+     "proc %s cmd %s sender %s args %S text %s"
+     process cmd sender args text))
+  ;; FIXME - Should we check to see if this is a shoes-off session?
   (condition-case nil
       (let ((cmdstr
              (or (aget shoes-off/cmd-names (string-to-number cmd)) cmd)))
@@ -533,13 +583,21 @@ What's cached is the full text response of the command.")
                              :shoes-off-welcome-cache
                              cmdstr text))
         (when (equal cmdstr "PART")
-          (message "shoes-off [%s] %s (%s) |%s|" process cmd args text)
+          (message "shoes-off/receive-hook [%s] %s (%s) |%s|"
+                   process cmd args text)
           (shoes-off/part process args text))
         (when (equal cmdstr "JOIN")
           (shoes-off/join process args text))
         ;; if we have a current bouncer con then send stuff there
         (awhen (process-get process :shoes-off-connection)
-          (rcirc-send-string it text)))
+          (catch :shoes-off-escape-privmsg
+            (when (and
+                   (equal cmdstr "PRIVMSG")
+                   (functionp shoes-off-receive-privmsg-plugin))
+              (funcall shoes-off-receive-privmsg-plugin
+                       process sender args))
+            ;; If we didn't throw carry on call send-string
+            (rcirc-send-string it text))))
     (error "whoops! something went wrong!!!")))
 
 ;; Setup the receive hook for the upstream IRC connection
