@@ -244,7 +244,11 @@ with the following data and keys:
  :user the username
  :user-info further information about the user
 
-Unsuccessful auth makes no changes and returns `nil'."
+Unsuccessful auth makes no changes and returns `nil'.
+
+For now the `:user' is the same as the `:nick' because the
+username seems to be not under control by many clients. irssi for
+example."
   (with-current-buffer bouncer-buffer
     (let*
         (details
@@ -265,6 +269,7 @@ Unsuccessful auth makes no changes and returns `nil'."
                  (plist-get details :user)
                  (plist-get details :nick))
         (goto-char pt)
+        (setq details (plist-put details :user (plist-get details :nick)))
         details))))
 
 (defconst shoes-off/cmd-numbers
