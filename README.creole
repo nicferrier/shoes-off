@@ -1,4 +1,6 @@
-a simple IRC bouncer written in EmacsLisp.
+= Shoes Off =
+
+Shoes-Off is a simple IRC bouncer written in EmacsLisp.
 
 A bouncer is a program that runs on a remote host and provides a sort
 of proxy irc server.  It connects to the real irc server with your
@@ -155,6 +157,28 @@ secure anyway.
 
 If you want secure IRC for your team consider 
 [[https://github.com/nfisher/SpikyIRC|SpikyIRC]]
+
+
+== FAQ ==
+
+Q How does shoes-off configuration/authentication work?
+
+A `shoes-off-start-session' is called for a user, that calls
+`shoes-off/get-config' with the username; this function may have a
+plugin implementation. It should return the username, password and
+server-alist for the user. The server-alist are illustrated above.
+
+When shoes-off needs to check authentication it calls
+`shoes-off/auth-check' with a username-spec and a password; this
+function may also have a plugin implementation. If succesfull it
+should return a transformed name in the manner of
+`shoes-off/auth-check-impl'.
+
+Different authentication systems can override the
+`shoes-off/get-config-plugin' and `shoes-off/auth-plugin' differently
+to ensure they can hold users and servers in whatever way they like.
+
+
 
 
 == Next steps ==
