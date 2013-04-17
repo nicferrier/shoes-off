@@ -1,0 +1,14 @@
+(shoes-off
+ :version "0.2.0"
+ :doc "Shoes-off, the Emacs IRC bouncer."
+ :author "Nic Ferrier <nferrier@ferrier.me.uk>"
+ :keywords "comm"
+ :maintainer "Nic Ferrier <nferrier@ferrier.me.uk>"
+ :created "19th September 2012"
+ :files 
+ ("shoes-off.el"
+  "shoes-off-log.el")
+ :requires ;; we do require rcirc but that's built in now
+ ((kv "0.0.9")
+  (anaphors "0.0.4")
+  (huskie "0.0.3")))

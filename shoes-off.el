@@ -2,13 +2,6 @@
 
 ;; Copyright (C) 2012  Nic Ferrier
 
-;; Author: Nic Ferrier <nferrier@ferrier.me.uk>
-;; Keywords: comm
-;; Maintainer: Nic Ferrier <nferrier@ferrier.me.uk>
-;; Created: 19th September 2012
-;; Version: 0.1.9
-;; Package-Requires: ((kv "0.0.5")(anaphora "0.0.4"))
-
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
 ;; the Free Software Foundation, either version 3 of the License, or
@@ -47,6 +40,21 @@
   "The TCP port the bouncer server will run on."
   :group 'shoes-off
   :type 'string)
+
+(defun shoes-off-set-logging (logging-option value)
+  "Turn logging on or off."
+  (set logging-option value)
+  (if value
+      (shoes-off-log-init)
+      ;; Else turn it off, just remove the print hook
+      (remove-hook
+       'rcirc-print-hooks 'shoes-off-write-log-hook)))
+
+(defcustom shoes-off-do-logging t
+  "Whether to do logging of bounced sessions."
+  :group 'shoes-off
+  :type 'boolean
+  :set 'shoes-off-set-logging)
 
 (defcustom shoes-off-config '()
   "The bouncer configuration.
@@ -140,7 +148,6 @@ Optionally retrieve only the specified SERVER."
     (if server
         (aget servers server)
         servers)))
-
 
 
 ;; Config abstraction
@@ -386,7 +393,7 @@ nick.
 If the plugin throws `:shoes-off-escape-privmsg' then the privmsg
 is not sent to the IRC session.")
 
-(defconst shoes-off/handle-request-privmsg-logging nil
+(defconst shoes-off/handle-request-privmsg-logging t
   "Whether to log privmsg's or not.")
 
 (defun shoes-off/handle-request (process authenticated request)
@@ -612,11 +619,12 @@ does NOT send the privmsg to the bouncer.")
 
 
 ;;;###autoload
-(defun shoes-off-start-session (username)
+(defun shoes-off-start-session (username &optional org-name)
   "Start the bouncer for USERNAME.
 
 Initiates the upstream IRC connections for the user."
   (interactive "MUsername to startup: ")
+  (when shoes-off-do-logging (shoes-off-log-init))
   (if shoes-off-server-port
       (unless shoes-off/server-process
         (shoes-off-start shoes-off-server-port)))
@@ -644,12 +652,11 @@ Initiates the upstream IRC connections for the user."
                        ;; Else we just use plain rcirc-connect
                        (rcirc-connect
                         server port nick user-name
-                        full-name channels password encryption))))
-             (puthash
-              ;; Store the session against the key: username@server
-              (format "%s@%s" username server)
-              connection
-              shoes-off/sessions))))))
+                        full-name channels password encryption)))
+                  (auth-tag (format "%s@%s" username server)))
+             ;; Mark the irc connection
+             (process-put connection :shoes-off auth-tag)
+             (puthash auth-tag connection shoes-off/sessions))))))
 
 (provide 'shoes-off)
 
