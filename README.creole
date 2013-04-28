@@ -75,9 +75,9 @@ the port you selected and use the username and password from the
     6901                                     ; port you started the bouncer on
     "nick-at-the-irc-network"                ; the Nick to use (only used locally)
     "user-to-connect-to-the-irc-network"     ; the username to connect to bouncer
-    "password-to-connect-to-the-irc-network" ; the password to connect to bouncer
     "Full Name"                              ; full name (not used I think)
-    ("#channel" "#otherchannel"))            ; start channels (not used I think)
+    '("#channel" "#otherchannel")            ; start channels (not used I think)
+    "password-to-connect-to-the-irc-network"); the password to connect to bouncer
 }}}
 
 This will connect to the bouncer and everything //should// work.
@@ -119,9 +119,9 @@ You can connect to these with:
     6901
     "bouncer-nick"
     "bouncer-username@irc-one.upstream.servername"
-    "password" 
     "Full Name"
-    ("#channel" "#otherchannel"))
+    '("#channel" "#otherchannel")
+    "password")
 }}}
 
 for the second one:
@@ -132,9 +132,9 @@ for the second one:
     6901
     "bouncer-nick"
     "bouncer-username@irc-two.upstream.servername"
-    "password" 
     "Full Name"
-    ("#channel" "#otherchannel"))
+    '("#channel" "#otherchannel")
+    "password")
 }}}
 
 
