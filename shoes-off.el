@@ -641,10 +641,9 @@ Initiates the upstream IRC connections for the user."
                 &key
                 nick port user-name
                 password full-name
-                channels) server-config
+                channels encryption) server-config
            ;; Connect the client socket
-           (let* (encryption ; hacked for now
-                  (connection
+           (let* ((connection
                    (if (functionp shoes-off/rcirc-connect-plugin)
                        (funcall shoes-off/rcirc-connect-plugin
                                 server port nick user-name
