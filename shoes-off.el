@@ -44,6 +44,12 @@ option in `shoes-off-config'."
   :group 'shoes-off
   :type 'integer)
 
+(defcustom shoes-off-server-host nil
+  "The host address to which clients will connect."
+  :group 'shoes-off
+  :type ' (choice (const nil)
+                  string))
+
 (defun shoes-off-set-logging (logging-option value)
   "Turn logging on or off."
   (set logging-option value)
@@ -74,6 +80,7 @@ will start all of them and qualify access to them like
      :options
      ((:username string)
       (:password string)
+      (:host string)
       (:port integer)
       (:server-alist
        (alist
@@ -468,7 +475,7 @@ is not sent to the IRC session.")
   "The server socket.")
 
 ;;;###autoload
-(defun shoes-off/make-server (port)
+(defun shoes-off/make-server (host port)
   "Make the listening server socket."
   (let ((buf (get-buffer-create "*shoes-off*")))
     (make-network-process
@@ -476,7 +483,7 @@ is not sent to the IRC session.")
      :buffer buf
      :server t
      :nowait 't
-     :host nil ; see elnode for interesting rules about this
+     :host host ; see elnode for interesting rules about this
      :service port
      :coding '(raw-text-unix . raw-text-unix)
      :family 'ipv4
@@ -486,16 +493,23 @@ is not sent to the IRC session.")
      :plist (list :shoes-off-example-prop t))))
 
 (defvar shoes-off-start/port-history nil)
+(defvar shoes-off-start/host-history nil)
 
 ;;;###autoload
-(defun shoes-off-start (port)
-  "Start the bouncer daemon on PORT."
+(defun shoes-off-start (host port)
+  "Start the bouncer daemon on HOST and PORT."
   (interactive (list
+                (read-from-minibuffer
+                 "Host: " nil nil nil
+                 'shoes-off-start/port-history)
                 (read-from-minibuffer
                  "Port: " nil nil nil
                  'shoes-off-start/port-history)))
   (setq shoes-off/server-process
-        (shoes-off/make-server (etypecase port
+        (shoes-off/make-server (if (equal host "nil")
+                                   nil
+                                 host)
+                               (etypecase port
                                  (integer port)
                                  (string (string-to-number port))))))
 
@@ -636,10 +650,11 @@ Initiates the upstream IRC connections for the user."
        username
        password
        port
+       host
        server-alist) (shoes-off/get-config username)
     (unless shoes-off/server-process
-          (shoes-off-start (or port
-                               shoes-off-server-port)))
+          (shoes-off-start (or host shoes-off-server-host)
+                           (or port shoes-off-server-port)))
     ;; rcirc-connect has args in a particular order
     (loop for server-config in server-alist
        do
