@@ -517,8 +517,11 @@ is not sent to the IRC session.")
 (defun shoes-off-stop ()
   "Stop the bouncer daemon."
   (interactive)
-  (delete-process shoes-off/server-process))
-
+  (if (not shoes-off/server-process)
+      (message "Shoes-off: not running.")
+    (delete-process shoes-off/server-process)
+    (setq shoes-off/server-process nil)
+    (message "Shoes-off: stopped.")))
 
 ;; Bouncer setup
 
