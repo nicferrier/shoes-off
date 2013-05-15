@@ -36,10 +36,13 @@
   :prefix "shoes-off-"
   :group 'applications)
 
-(defcustom shoes-off-server-port "6901"
-  "The TCP port the bouncer server will run on."
+(defcustom shoes-off-server-port 6901
+  "The TCP port the bouncer server will run on.
+
+This setting can be overwritten per bouncer with the `:port'
+option in `shoes-off-config'."
   :group 'shoes-off
-  :type 'string)
+  :type 'integer)
 
 (defun shoes-off-set-logging (logging-option value)
   "Turn logging on or off."
@@ -71,6 +74,7 @@ will start all of them and qualify access to them like
      :options
      ((:username string)
       (:password string)
+      (:port integer)
       (:server-alist
        (alist
         :key-type string
@@ -491,7 +495,9 @@ is not sent to the IRC session.")
                  "Port: " nil nil nil
                  'shoes-off-start/port-history)))
   (setq shoes-off/server-process
-        (shoes-off/make-server (string-to-number port))))
+        (shoes-off/make-server (etypecase port
+                                 (integer port)
+                                 (string (string-to-number port))))))
 
 ;;;###autoload
 (defun shoes-off-stop ()
@@ -625,14 +631,15 @@ does NOT send the privmsg to the bouncer.")
 Initiates the upstream IRC connections for the user."
   (interactive "MUsername to startup: ")
   (when shoes-off-do-logging (shoes-off-log-init))
-  (if shoes-off-server-port
-      (unless shoes-off/server-process
-        (shoes-off-start shoes-off-server-port)))
   (destructuring-bind
-        (&key
-         username
-         password
-         server-alist) (shoes-off/get-config username)
+      (&key
+       username
+       password
+       port
+       server-alist) (shoes-off/get-config username)
+    (unless shoes-off/server-process
+          (shoes-off-start (or port
+                               shoes-off-server-port)))
     ;; rcirc-connect has args in a particular order
     (loop for server-config in server-alist
        do
