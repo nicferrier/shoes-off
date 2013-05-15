@@ -332,9 +332,8 @@ example."
 (defun shoes-off/get-session (process)
   "Get the associated session from the client process."
   (let* ((auth (shoes-off/get-auth-details process))
-         (user (plist-get auth :username))
-         (server (plist-get auth :server-alist)))
-    (gethash (format "%s@%s" user (caar server)) shoes-off/sessions)))
+         (user (plist-get auth :username)))
+    (gethash user shoes-off/sessions)))
 
 
 (defconst shoes-off/cache-response-welcome-commands
