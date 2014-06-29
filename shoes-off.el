@@ -28,6 +28,7 @@
 (require 'kv)
 (require 'rcirc)
 (require 'assoc)
+(require 'shoes-off-log)
 
 (defgroup shoes-off nil
   "An irc bouncer."
